@@ -1,0 +1,36 @@
+services:
+  io-service:
+    build: ./io_app
+    image: io-image-local:latest
+    container_name: io-container
+    restart: always
+    privileged: true
+    environment:
+      PYTHONUNBUFFERED: "1"
+      UR20_IP: "192.168.0.222"
+      UR20_PORT: "502"
+      UR20_ADDR: "2048"
+      UR20_UNIT_ID: "1"
+      SERIAL_PORT: "/dev/ttyAMA2"
+      KEEPALIVE_INTERVAL_SEC: "3"
+      KEEPALIVE_ADDR: "0"
+      KEEPALIVE_COUNT: "1"
+    volumes:
+      - shared_data:/app/shared
+
+  ui-service:
+    build: ./ui_app
+    image: ui-image-local:latest
+    container_name: ui-container
+    ports:
+      - "5000:5000"
+    restart: always
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - shared_data:/app/shared
+    depends_on:
+      - io-service
+
+volumes:
+  shared_data:

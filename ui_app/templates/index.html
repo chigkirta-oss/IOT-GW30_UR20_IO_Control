@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>UR20 IO Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+font-family: Arial, sans-serif;
+margin: 24px;
+background: #f3f4f6;
+color: #111827;
+}
+
+.panel {
+background: white;
+border-radius: 10px;
+padding: 18px;
+margin-bottom: 18px;
+box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.channels {
+display: grid;
+grid-template-columns: repeat(4, minmax(120px, 1fr));
+gap: 12px;
+}
+
+.channel {
+border: 1px solid #d1d5db;
+border-radius: 8px;
+padding: 12px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+background: #fee2e2;
+}
+
+.channel.on {
+background: #dcfce7;
+border-color: #16a34a;
+}
+
+button {
+cursor: pointer;
+padding: 10px 14px;
+border: none;
+border-radius: 6px;
+color: white;
+background: #2563eb;
+font-weight: bold;
+}
+
+button.danger {
+background: #dc2626;
+}
+
+button.gray {
+background: #4b5563;
+}
+
+.actions {
+display: flex;
+gap: 10px;
+flex-wrap: wrap;
+margin-top: 12px;
+}
+
+.ok {
+color: #15803d;
+font-weight: bold;
+}
+
+.ng {
+color: #b91c1c;
+font-weight: bold;
+}
+
+.mono {
+font-family: Consolas, monospace;
+}
+</style>
+</head>
+
+<body>
+<h1>UR20 IO Control</h1>
+<p>UR20-FBC-MOD-TCP-V2 / Modbus TCP / Register 2048</p>
+
+<div class="panel">
+<h2>Status</h2>
+<div>Connection: <span id="connection">-</span></div>
+<div>Last Write: <span id="lastWrite">-</span></div>
+<div>Mask: <span id="mask" class="mono">-</span></div>
+<div>Error: <span id="error">-</span></div>
+
+<div class="actions">
+<button onclick="allOn()">ALL ON</button>
+<button class="danger" onclick="allOff()">ALL OFF</button>
+<button class="gray" onclick="refreshAll()">Refresh</button>
+</div>
+</div>
+
+<div class="panel">
+<h2>Channels</h2>
+<div id="channels" class="channels"></div>
+</div>
+
+<script>
+let outputs = Array(16).fill(false);
+
+function renderChannels() {
+const root = document.getElementById("channels");
+root.innerHTML = "";
+
+for (let ch = 0; ch < 16; ch++) {
+const div = document.createElement("div");
+div.className = "channel" + (outputs[ch] ? " on" : "");
+
+const label = document.createElement("div");
+label.innerHTML = "<strong>CH" + ch + "</strong><br>" + (outputs[ch] ? "ON" : "OFF");
+
+const btn = document.createElement("button");
+btn.textContent = outputs[ch] ? "OFF" : "ON";
+btn.onclick = function() {
+setChannel(ch, !outputs[ch]);
+};
+
+div.appendChild(label);
+div.appendChild(btn);
+root.appendChild(div);
+}
+}
+
+async function postJson(url, body) {
+const res = await fetch(url, {
+method: "POST",
+headers: {
+"Content-Type": "application/json"
+},
+body: JSON.stringify(body)
+});
+
+return await res.json();
+}
+
+async function setChannel(ch, value) {
+const data = await postJson("/api/control", {
+channel: ch,
+value: value
+});
+
+if (data.status !== "ok") {
+alert("Control failed: " + JSON.stringify(data));
+}
+
+await refreshAll();
+}
+
+async function allOn() {
+const data = await postJson("/api/all_on", {});
+if (data.status !== "ok") {
+alert("ALL ON failed: " + JSON.stringify(data));
+}
+await refreshAll();
+}
+
+async function allOff() {
+const data = await postJson("/api/all_off", {});
+if (data.status !== "ok") {
+alert("ALL OFF failed: " + JSON.stringify(data));
+}
+await refreshAll();
+}
+
+async function refreshAll() {
+try {
+const cmdRes = await fetch("/api/command");
+const cmd = await cmdRes.json();
+
+if (Array.isArray(cmd.outputs)) {
+outputs = cmd.outputs;
+}
+
+const stRes = await fetch("/api/battery");
+const st = await stRes.json();
+const ur20 = st.ur20 || {};
+
+document.getElementById("connection").innerHTML =
+ur20.connected ? '<span class="ok">Connected</span>' : '<span class="ng">Disconnected</span>';
+
+document.getElementById("lastWrite").innerHTML =
+ur20.last_write_ok ? '<span class="ok">OK</span>' : '<span class="ng">NG</span>';
+
+document.getElementById("mask").textContent =
+(ur20.mask_hex || cmd.mask_hex || "0x0000") + " / " + (ur20.mask ?? cmd.mask ?? 0);
+
+document.getElementById("error").textContent = ur20.error || "-";
+
+if (Array.isArray(ur20.outputs)) {
+outputs = ur20.outputs;
+}
+
+renderChannels();
+
+} catch (e) {
+console.log(e);
+}
+}
+
+renderChannels();
+refreshAll();
+setInterval(refreshAll, 1000);
+</script>
+</body>
+</html>
