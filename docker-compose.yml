@@ -7,14 +7,24 @@ services:
     privileged: true
     environment:
       PYTHONUNBUFFERED: "1"
+
       UR20_IP: "192.168.0.222"
       UR20_PORT: "502"
       UR20_ADDR: "2048"
       UR20_UNIT_ID: "1"
+
       SERIAL_PORT: "/dev/ttyAMA2"
+      SERIAL_BAUDRATE: "9600"
+      SERIAL_TIMEOUT: "0.05"
+
       KEEPALIVE_INTERVAL_SEC: "3"
       KEEPALIVE_ADDR: "0"
       KEEPALIVE_COUNT: "1"
+
+      # normal  : UI CH0 -> bit0, CH15 -> bit15
+      # reverse : UI CH0 -> bit15, CH15 -> bit0
+      OUTPUT_BIT_ORDER: "normal"
+
     volumes:
       - shared_data:/app/shared
 
