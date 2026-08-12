@@ -1,216 +1,388 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>UR20 IO Control</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <title>UR20 IO Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-body {
-font-family: Arial, sans-serif;
-margin: 24px;
-background: #f3f4f6;
-color: #111827;
-}
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      background: #f3f4f6;
+      color: #111827;
+    }
 
-.panel {
-background: white;
-border-radius: 10px;
-padding: 18px;
-margin-bottom: 18px;
-box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-}
+    h1 {
+      margin-bottom: 4px;
+    }
 
-.channels {
-display: grid;
-grid-template-columns: repeat(4, minmax(120px, 1fr));
-gap: 12px;
-}
+    p {
+      margin-top: 0;
+      color: #4b5563;
+    }
 
-.channel {
-border: 1px solid #d1d5db;
-border-radius: 8px;
-padding: 12px;
-display: flex;
-justify-content: space-between;
-align-items: center;
-background: #fee2e2;
-}
+    .panel {
+      background: white;
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
 
-.channel.on {
-background: #dcfce7;
-border-color: #16a34a;
-}
+    .status-grid {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 8px 16px;
+      align-items: center;
+      font-size: 14px;
+    }
 
-button {
-cursor: pointer;
-padding: 10px 14px;
-border: none;
-border-radius: 6px;
-color: white;
-background: #2563eb;
-font-weight: bold;
-}
+    .channels {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 12px;
+    }
 
-button.danger {
-background: #dc2626;
-}
+    .channel {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fee2e2;
+    }
 
-button.gray {
-background: #4b5563;
-}
+    .channel.on {
+      background: #dcfce7;
+      border-color: #16a34a;
+    }
 
-.actions {
-display: flex;
-gap: 10px;
-flex-wrap: wrap;
-margin-top: 12px;
-}
+    .channel-label {
+      line-height: 1.4;
+    }
 
-.ok {
-color: #15803d;
-font-weight: bold;
-}
+    button {
+      cursor: pointer;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      background: #2563eb;
+      font-weight: bold;
+    }
 
-.ng {
-color: #b91c1c;
-font-weight: bold;
-}
+    button:hover {
+      opacity: 0.9;
+    }
 
-.mono {
-font-family: Consolas, monospace;
-}
-</style>
+    button.danger {
+      background: #dc2626;
+    }
+
+    button.gray {
+      background: #4b5563;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .ok {
+      color: #15803d;
+      font-weight: bold;
+    }
+
+    .ng {
+      color: #b91c1c;
+      font-weight: bold;
+    }
+
+    .warn {
+      color: #b45309;
+      font-weight: bold;
+    }
+
+    .mono {
+      font-family: Consolas, monospace;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    @media (max-width: 800px) {
+      .channels {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 
 <body>
-<h1>UR20 IO Control</h1>
-<p>UR20-FBC-MOD-TCP-V2 / Modbus TCP / Register 2048</p>
+  <h1>UR20 IO Control</h1>
+  <p>UR20-FBC-MOD-TCP-V2 / Modbus TCP / Register 2048</p>
 
-<div class="panel">
-<h2>Status</h2>
-<div>Connection: <span id="connection">-</span></div>
-<div>Last Write: <span id="lastWrite">-</span></div>
-<div>Mask: <span id="mask" class="mono">-</span></div>
-<div>Error: <span id="error">-</span></div>
+  <div class="panel">
+    <h2>Status</h2>
 
-<div class="actions">
-<button onclick="allOn()">ALL ON</button>
-<button class="danger" onclick="allOff()">ALL OFF</button>
-<button class="gray" onclick="refreshAll()">Refresh</button>
-</div>
-</div>
+    <div class="status-grid">
+      <div>Connection</div>
+      <div id="connection">-</div>
 
-<div class="panel">
-<h2>Channels</h2>
-<div id="channels" class="channels"></div>
-</div>
+      <div>Last Write</div>
+      <div id="lastWrite">-</div>
 
-<script>
-let outputs = Array(16).fill(false);
+      <div>UI Mask</div>
+      <div id="mask" class="mono">-</div>
 
-function renderChannels() {
-const root = document.getElementById("channels");
-root.innerHTML = "";
+      <div>Physical Mask</div>
+      <div id="physicalMask" class="mono">-</div>
 
-for (let ch = 0; ch < 16; ch++) {
-const div = document.createElement("div");
-div.className = "channel" + (outputs[ch] ? " on" : "");
+      <div>Output Bit Order</div>
+      <div id="bitOrder" class="mono">-</div>
 
-const label = document.createElement("div");
-label.innerHTML = "<strong>CH" + ch + "</strong><br>" + (outputs[ch] ? "ON" : "OFF");
+      <div>Keep Alive</div>
+      <div id="keepalive">-</div>
 
-const btn = document.createElement("button");
-btn.textContent = outputs[ch] ? "OFF" : "ON";
-btn.onclick = function() {
-setChannel(ch, !outputs[ch]);
-};
+      <div>Error</div>
+      <div id="error">-</div>
+    </div>
 
-div.appendChild(label);
-div.appendChild(btn);
-root.appendChild(div);
-}
-}
+    <div class="actions">
+      <button onclick="allOn()">ALL ON</button>
+      <button class="danger" onclick="allOff()">ALL OFF</button>
+      <button class="gray" onclick="refreshAll()">Refresh</button>
+    </div>
+  </div>
 
-async function postJson(url, body) {
-const res = await fetch(url, {
-method: "POST",
-headers: {
-"Content-Type": "application/json"
-},
-body: JSON.stringify(body)
-});
+  <div class="panel">
+    <h2>Channels</h2>
+    <div id="channels" class="channels"></div>
+  </div>
 
-return await res.json();
-}
+  <div class="panel">
+    <h2>Battery / Serial</h2>
 
-async function setChannel(ch, value) {
-const data = await postJson("/api/control", {
-channel: ch,
-value: value
-});
+    <div class="status-grid">
+      <div>Voltage</div>
+      <div id="voltage">-</div>
 
-if (data.status !== "ok") {
-alert("Control failed: " + JSON.stringify(data));
-}
+      <div>Current</div>
+      <div id="current">-</div>
 
-await refreshAll();
-}
+      <div>SOC</div>
+      <div id="soc">-</div>
 
-async function allOn() {
-const data = await postJson("/api/all_on", {});
-if (data.status !== "ok") {
-alert("ALL ON failed: " + JSON.stringify(data));
-}
-await refreshAll();
-}
+      <div>SOH</div>
+      <div id="soh">-</div>
 
-async function allOff() {
-const data = await postJson("/api/all_off", {});
-if (data.status !== "ok") {
-alert("ALL OFF failed: " + JSON.stringify(data));
-}
-await refreshAll();
-}
+      <div>Max V</div>
+      <div id="maxV">-</div>
 
-async function refreshAll() {
-try {
-const cmdRes = await fetch("/api/command");
-const cmd = await cmdRes.json();
+      <div>Min V</div>
+      <div id="minV">-</div>
 
-if (Array.isArray(cmd.outputs)) {
-outputs = cmd.outputs;
-}
+      <div>Avg Temp</div>
+      <div id="avgTemp">-</div>
 
-const stRes = await fetch("/api/battery");
-const st = await stRes.json();
-const ur20 = st.ur20 || {};
+      <div>Serial</div>
+      <div id="serial">-</div>
+    </div>
+  </div>
 
-document.getElementById("connection").innerHTML =
-ur20.connected ? '<span class="ok">Connected</span>' : '<span class="ng">Disconnected</span>';
+  <script>
+    let outputs = Array(16).fill(false);
 
-document.getElementById("lastWrite").innerHTML =
-ur20.last_write_ok ? '<span class="ok">OK</span>' : '<span class="ng">NG</span>';
+    function renderChannels() {
+      const root = document.getElementById("channels");
+      root.innerHTML = "";
 
-document.getElementById("mask").textContent =
-(ur20.mask_hex || cmd.mask_hex || "0x0000") + " / " + (ur20.mask ?? cmd.mask ?? 0);
+      for (let ch = 0; ch < 16; ch++) {
+        const div = document.createElement("div");
+        div.className = "channel" + (outputs[ch] ? " on" : "");
 
-document.getElementById("error").textContent = ur20.error || "-";
+        const label = document.createElement("div");
+        label.className = "channel-label";
+        label.innerHTML =
+          "<strong>CH" + ch + "</strong><br>" +
+          (outputs[ch] ? "ON" : "OFF");
 
-if (Array.isArray(ur20.outputs)) {
-outputs = ur20.outputs;
-}
+        const btn = document.createElement("button");
+        btn.textContent = outputs[ch] ? "OFF" : "ON";
+        btn.onclick = function() {
+          setChannel(ch, !outputs[ch]);
+        };
 
-renderChannels();
+        div.appendChild(label);
+        div.appendChild(btn);
+        root.appendChild(div);
+      }
+    }
 
-} catch (e) {
-console.log(e);
-}
-}
+    async function postJson(url, body) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
 
-renderChannels();
-refreshAll();
-setInterval(refreshAll, 1000);
-</script>
+      return await res.json();
+    }
+
+    async function setChannel(ch, value) {
+      const data = await postJson("/api/control", {
+        channel: ch,
+        value: value
+      });
+
+      if (data.status !== "ok") {
+        alert("Control failed: " + JSON.stringify(data));
+      }
+
+      await refreshAll();
+    }
+
+    async function allOn() {
+      const data = await postJson("/api/all_on", {});
+
+      if (data.status !== "ok") {
+        alert("ALL ON failed: " + JSON.stringify(data));
+      }
+
+      await refreshAll();
+    }
+
+    async function allOff() {
+      const data = await postJson("/api/all_off", {});
+
+      if (data.status !== "ok") {
+        alert("ALL OFF failed: " + JSON.stringify(data));
+      }
+
+      await refreshAll();
+    }
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = value;
+      }
+    }
+
+    function setHtml(id, value) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerHTML = value;
+      }
+    }
+
+    async function refreshAll() {
+      try {
+        const cmdRes = await fetch("/api/command");
+        const cmd = await cmdRes.json();
+
+        if (Array.isArray(cmd.outputs)) {
+          outputs = cmd.outputs;
+        }
+
+        const stRes = await fetch("/api/battery");
+        const st = await stRes.json();
+
+        const ur20 = st.ur20 || {};
+        const keepalive = st.ur20_keepalive || {};
+        const serial = st.serial || {};
+
+        setHtml(
+          "connection",
+          ur20.connected
+            ? '<span class="ok">Connected</span>'
+            : '<span class="ng">Disconnected</span>'
+        );
+
+        setHtml(
+          "lastWrite",
+          ur20.last_write_ok
+            ? '<span class="ok">OK</span>'
+            : '<span class="ng">NG</span>'
+        );
+
+        const uiMaskHex = ur20.mask_hex || cmd.mask_hex || "0x0000";
+        const uiMaskDec = ur20.mask ?? cmd.mask ?? 0;
+
+        setText("mask", uiMaskHex + " / " + uiMaskDec);
+
+        const physicalMaskHex = ur20.physical_mask_hex || "0x0000";
+        const physicalMaskDec = ur20.physical_mask ?? 0;
+
+        setText("physicalMask", physicalMaskHex + " / " + physicalMaskDec);
+
+        setText("bitOrder", ur20.output_bit_order || "-");
+
+        if (keepalive.last_ok === true) {
+          setHtml(
+            "keepalive",
+            '<span class="ok">OK</span>' +
+            ' <span class="small mono">FC' + (keepalive.function_code || 4) +
+            ' addr=' + (keepalive.address ?? "-") +
+            ' value=' + JSON.stringify(keepalive.last_value) +
+            ' time=' + (keepalive.last_time || "-") +
+            '</span>'
+          );
+        } else if (keepalive.enabled) {
+          setHtml(
+            "keepalive",
+            '<span class="warn">NG</span>' +
+            ' <span class="small mono">' + (keepalive.last_error || "-") + '</span>'
+          );
+        } else {
+          setText("keepalive", "-");
+        }
+
+        setText("error", ur20.error || "-");
+
+        if (Array.isArray(ur20.outputs)) {
+          outputs = ur20.outputs;
+        }
+
+        setText("voltage", (st.voltage ?? 0) + " V");
+        setText("current", (st.current ?? 0) + " A");
+        setText("soc", (st.soc ?? 0) + " %");
+        setText("soh", (st.soh ?? 0) + " %");
+        setText("maxV", (st.max_v ?? 0) + " V");
+        setText("minV", (st.min_v ?? 0) + " V");
+        setText("avgTemp", (st.avg_temp ?? 0) + " °C");
+
+        const serialOpened = serial.opened === true;
+        setHtml(
+          "serial",
+          serialOpened
+            ? '<span class="ok">Opened</span> <span class="small mono">' + (serial.port || "") + '</span>'
+            : '<span class="ng">Closed</span> <span class="small mono">' + (serial.last_error || "") + '</span>'
+        );
+
+        renderChannels();
+
+      } catch (e) {
+        console.log(e);
+        setHtml("connection", '<span class="ng">UI API Error</span>');
+      }
+    }
+
+    renderChannels();
+    refreshAll();
+    setInterval(refreshAll, 1000);
+  </script>
 </body>
 </html>
